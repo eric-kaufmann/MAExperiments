@@ -2,12 +2,12 @@ import os
 import pandas as pd
 
 from train_single_coord_linear_mlp import MODEL_PATH, MODEL_NAME, SAMPLE_SIZE, INPUT_SIZE, HIDDEN_SIZE, OUTPUT_SIZE
+from utils.test_utils import evaluate_model, save_results
 
 import warnings
 warnings.filterwarnings("ignore")
 
 if __name__ == "__main__":
-    from utils.test_utils import evaluate_model, save_results
     
     param_dict = {
         "model_name": MODEL_NAME,
