@@ -57,7 +57,7 @@ def get_test_files(transform_function_str):
     
     return file_information
 
-def get_model(param_dict):
+def get_model(param_dict, model_dict):
     if ('linear_mlp' in param_dict['model_name']) or ('linear_autoencoder' in param_dict['model_name']):    
         layers = [param_dict['input_size']] + param_dict['hidden_size'] + [param_dict['output_size']]
         model = MLP(layers)
@@ -66,11 +66,11 @@ def get_model(param_dict):
         mlp = MLP([param_dict['input_size']] + param_dict['hidden_size'] + [param_dict['output_size']])
         model = EncoderMLP(encoder=encoder, mlp=mlp)
     elif param_dict['model_name'] == 'pointnet':
-        encoder = PointNetEncoder(in_channels=3, z_size=64)
+        encoder = PointNetEncoder(in_channels=[3 if model_dict['transf'] != 'rel' else 8], z_size=64)
         decoder = PointNetDecoder(z_size=64, out_dim=param_dict['sample_size'])
         model = PointNet(encoder=encoder, decoder=decoder)
     elif param_dict['model_name'] == 'pointnetpp':
-        model = PointNet2_2(c_in=3, c_out=3)
+        model = PointNet2_2(c_in=[3 if model_dict['transf'] != 'rel' else 8], c_out=3)
     
     return model
         
@@ -85,7 +85,7 @@ def evaluate_model(model_path, param_dict):
 
     test_files = get_test_files(model_dict['transf'])
     
-    model = get_model(param_dict)
+    model = get_model(param_dict, model_dict)
     model = load_model_weights(model, model_path)
     
     results = []
