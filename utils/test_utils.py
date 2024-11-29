@@ -66,11 +66,11 @@ def get_model(param_dict, model_dict):
         mlp = MLP([param_dict['input_size']] + param_dict['hidden_size'] + [param_dict['output_size']])
         model = EncoderMLP(encoder=encoder, mlp=mlp)
     elif param_dict['model_name'] == 'pointnet':
-        encoder = PointNetEncoder(in_channels=[3 if model_dict['transf'] != 'rel' else 8], z_size=64)
+        encoder = PointNetEncoder(in_channels=3 if model_dict['transf'] != 'rel' else 8, z_size=64)
         decoder = PointNetDecoder(z_size=64, out_dim=param_dict['sample_size'])
         model = PointNet(encoder=encoder, decoder=decoder)
     elif param_dict['model_name'] == 'pointnetpp':
-        model = PointNet2_2(c_in=[3 if model_dict['transf'] != 'rel' else 8], c_out=3)
+        model = PointNet2_2(c_in=3 if model_dict['transf'] != 'rel' else 8, c_out=3)
     
     return model
         
