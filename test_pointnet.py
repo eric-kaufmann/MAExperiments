@@ -1,9 +1,6 @@
-import torch
 import os
 import pandas as pd
 
-from utils.metrics import *
-from utils.helper_functions import *
 from train_pointnet import MODEL_PATH, MODEL_NAME, SAMPLE_SIZE
 from utils.test_utils import evaluate_model, save_results
 
