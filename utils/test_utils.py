@@ -43,6 +43,9 @@ def get_test_files(transform_function_str):
     elif transform_function_str == 'grid128':
         vessel_data_path = "/home/ne34gux/workspace/experiments/data/vessel_grid128_data"
         geometry_data_path = "/home/ne34gux/workspace/experiments/data/geom_grid128_data"
+    elif transform_function_str == 'rel':
+        vessel_data_path = "/home/ne34gux/workspace/experiments/data/vessel_relative_data"
+        geometry_data_path = "/home/ne34gux/workspace/experiments/data/geom_rel_data"
     else:
         vessel_data_path = "/home/ne34gux/workspace/experiments/data/vessel_point_data"
         geometry_data_path = "/home/ne34gux/workspace/experiments/data/geom_point_data"
@@ -58,12 +61,18 @@ def get_test_files(transform_function_str):
     return file_information
 
 def get_model(param_dict, model_dict):
+    if model_dict['transf'] == 'rel':
+        input_size = 8 * param_dict['sample_size']
+    elif (param_dict['model_name'] != 'pointnet') and (param_dict['model_name'] != 'pointnetpp'):
+        input_size = param_dict['input_size']
+
+
     if ('linear_mlp' in param_dict['model_name']) or ('linear_autoencoder' in param_dict['model_name']):    
-        layers = [param_dict['input_size']] + param_dict['hidden_size'] + [param_dict['output_size']]
+        layers = [input_size] + param_dict['hidden_size'] + [param_dict['output_size']]
         model = MLP(layers)
     elif 'linear_encoder' in param_dict['model_name']:
         encoder = MLP([param_dict['encoder_input_size']] + param_dict['encoder_hidden_size'] + [param_dict['encoder_output_size']])
-        mlp = MLP([param_dict['input_size']] + param_dict['hidden_size'] + [param_dict['output_size']])
+        mlp = MLP([input_size + param_dict['encoder_output_size']] + param_dict['hidden_size'] + [param_dict['output_size']])
         model = EncoderMLP(encoder=encoder, mlp=mlp)
     elif param_dict['model_name'] == 'pointnet':
         encoder = PointNetEncoder(in_channels=3 if model_dict['transf'] != 'rel' else 8, z_size=64)
@@ -77,9 +86,9 @@ def get_model(param_dict, model_dict):
 def evaluate_model(model_path, param_dict):
     model_dict = decode_model_name(model_path)
     
-    if model_dict['transf'] == 'rel':
-        print("   >> Skipped")
-        return pd.DataFrame()
+    # if model_dict['transf'] == 'rel':
+    #     print("   >> Skipped")
+    #     return pd.DataFrame()
     
     transform_function = transform_function_mapping[model_dict['transf']]
 
@@ -87,6 +96,13 @@ def evaluate_model(model_path, param_dict):
     
     model = get_model(param_dict, model_dict)
     model = load_model_weights(model, model_path)
+    
+    print("   model_size:", get_model_size(model))
+    
+    # print("#### 1 ####")
+    # print("torch.cuda.memory_allocated: %fGB"%(torch.cuda.memory_allocated(0)/1024/1024/1024))
+    # print("torch.cuda.memory_reserved: %fGB"%(torch.cuda.memory_reserved(0)/1024/1024/1024))
+    # print("torch.cuda.max_memory_reserved: %fGB"%(torch.cuda.max_memory_reserved(0)/1024/1024/1024))
     
     results = []
     
@@ -107,59 +123,104 @@ def evaluate_model(model_path, param_dict):
             }
         elif model_dict['transf'] == 'rel':
             vessel_dict = {
-                'fluid_points': 'input_tensor',
-                'sys_vel': 'target_tensor',
+                'fluid_points': 'input',
+                'sys_vel': 'target',
                 'mesh_points': 'mesh_points'
             }
-            param_dict['input_size'] = 8 * param_dict['sample_size']
+            
+        # print("#### 2 ####")
+        # print("torch.cuda.memory_allocated: %fGB"%(torch.cuda.memory_allocated(0)/1024/1024/1024))
+        # print("torch.cuda.memory_reserved: %fGB"%(torch.cuda.memory_reserved(0)/1024/1024/1024))
+        # print("torch.cuda.max_memory_reserved: %fGB"%(torch.cuda.max_memory_reserved(0)/1024/1024/1024))
         
         # Load the data
         if 'linear_encoder' in param_dict['model_name']:
             xyz = torch.Tensor(test_object[vessel_dict['fluid_points']])
             vel = torch.Tensor(test_object[vessel_dict['sys_vel']])
             if model_dict['transf'] == 'rel':
+                geom = xyz[:,:3]
+            elif model_dict['transf'] == 'grid64' or model_dict['transf'] == 'grid128':
+                xyz, vel = grid_to_point_cloud(xyz, vel)
                 geom = xyz[torch.all(vel != 0, dim=1)]
             else:
                 geom = torch.Tensor(test_object[vessel_dict['mesh_points']])
+            
+            if geom.shape[0] < param_dict['encoder_sample_size']:
+                sample_idx = np.random.choice(geom.shape[0], param_dict['encoder_sample_size'], replace=True)
+            else:
+                sample_idx = np.random.choice(geom.shape[0], param_dict['encoder_sample_size'], replace=False)
+            geom = geom[sample_idx]
         else:
             xyz = torch.Tensor(test_object[vessel_dict['fluid_points']])
             vel = torch.Tensor(test_object[vessel_dict['sys_vel']])
-            
-        if model_dict['transf'] == 'grid64' or model_dict['transf'] == 'grid128':
-            xyz, vel = grid_to_point_cloud(xyz, vel)
+            if model_dict['transf'] == 'grid64' or model_dict['transf'] == 'grid128':
+                xyz, vel = grid_to_point_cloud(xyz, vel)
+        
         
         # Transform the data
         if 'linear_encoder' in param_dict['model_name']:
             xyz, vel, geom = transform_function(xyz, vel, mesh_points=geom)
         else:
             xyz, vel = transform_function(xyz, vel)
+            
+        # print("#### 3 ####")
+        # print("torch.cuda.memory_allocated: %fGB"%(torch.cuda.memory_allocated(0)/1024/1024/1024))
+        # print("torch.cuda.memory_reserved: %fGB"%(torch.cuda.memory_reserved(0)/1024/1024/1024))
+        # print("torch.cuda.max_memory_reserved: %fGB"%(torch.cuda.max_memory_reserved(0)/1024/1024/1024))
         
         # Batch the data
+        in_channels = 3 if model_dict['transf'] != 'rel' else 8
+        out_channels = 3
+
+        B = xyz.shape[0] // param_dict['sample_size']
         if 'linear_encoder' in param_dict['model_name']:
-            B = xyz.shape[0] // param_dict['sample_size']
-            batched_input_tensor = xyz[:B*param_dict['sample_size']].view(B, 3)
-            batched_target_tensor = vel[:B*param_dict['sample_size']].view(B, 3)
+            batched_input_tensor = xyz[:B*param_dict['sample_size']].view(B, in_channels)
+            batched_target_tensor = vel[:B*param_dict['sample_size']].view(B, out_channels)
             batched_geom_tensor = geom.repeat(B, 1, 1)
         else:
-            B = xyz.shape[0] // param_dict['sample_size']
-            batched_input_tensor = xyz[:B*param_dict['sample_size']].view(B, param_dict['sample_size'], 3)
-            batched_target_tensor = vel[:B*param_dict['sample_size']].view(B, param_dict['sample_size'], 3)
+            batched_input_tensor = xyz[:B*param_dict['sample_size']].view(B, param_dict['sample_size'], in_channels)
+            batched_target_tensor = vel[:B*param_dict['sample_size']].view(B, param_dict['sample_size'], out_channels)
+            
+        batched_input_tensor = batched_input_tensor.to(DEVICE)
+        batched_target_tensor = batched_target_tensor.to(DEVICE)
+        
+        
+        # print("#### 4 ####")
+        # print("torch.cuda.memory_allocated: %fGB"%(torch.cuda.memory_allocated(0)/1024/1024/1024))
+        # print("torch.cuda.memory_reserved: %fGB"%(torch.cuda.memory_reserved(0)/1024/1024/1024))
+        # print("torch.cuda.max_memory_reserved: %fGB"%(torch.cuda.max_memory_reserved(0)/1024/1024/1024))
             
         # Run through the model
         if 'linear_encoder' in param_dict['model_name']:
-            batched_pred_tensor = model(batched_input_tensor, batched_geom_tensor).reshape(B, 3)
+            batched_pred_tensor = model(batched_input_tensor, batched_geom_tensor).reshape(B, out_channels)
         elif 'linear_autoencoder' in param_dict['model_name']:
-            batched_pred_tensor = model(batched_input_tensor.flatten(start_dim=1)).reshape(B, param_dict['sample_size'], 3)
-        elif 'pointnet' in param_dict['model_name']:
-            batched_pred_tensor = model(batched_input_tensor).reshape(B, param_dict['sample_size'], 3)
+            batched_pred_tensor = model(batched_input_tensor.flatten(start_dim=1)).reshape(B, param_dict['sample_size'], out_channels)
+        elif 'pointnet_' in param_dict['model_name']:
+            batched_pred_tensor = model(batched_input_tensor).reshape(B, param_dict['sample_size'], out_channels)
+        elif 'pointnetpp' in param_dict['model_name']:
+            sub_batch_size = 4  # Define a smaller batch size to avoid memory issues
+            sub_batches = torch.split(batched_input_tensor, sub_batch_size, dim=0)
+            batched_pred_tensor = torch.zeros_like(batched_target_tensor, dtype=torch.float32).to(DEVICE)
+            for s_idx, sub_batch in enumerate(sub_batches):
+                sub_batch = sub_batch.to(DEVICE)
+                # print()
+                # print("torch.cuda.memory_allocated: %fGB"%(torch.cuda.memory_allocated(0)/1024/1024/1024))
+                # print("torch.cuda.memory_reserved: %fGB"%(torch.cuda.memory_reserved(0)/1024/1024/1024))
+                # print("torch.cuda.max_memory_reserved: %fGB"%(torch.cuda.max_memory_reserved(0)/1024/1024/1024))
+                batched_pred_tensor[s_idx*sub_batch_size:(s_idx+1)*sub_batch_size] = model(sub_batch).reshape(sub_batch.shape[0], param_dict['sample_size'], out_channels).detach()
         elif 'linear_mlp' in param_dict['model_name']:
-            batched_pred_tensor = model(batched_input_tensor).reshape(B, 3)
+            batched_pred_tensor = model(batched_input_tensor).reshape(B, out_channels)
         else:
             batched_pred_tensor = model(batched_input_tensor)
         
         mse = mse_error(batched_pred_tensor, batched_target_tensor)
         mae = mae_error(batched_pred_tensor, batched_target_tensor)
         cs = cosine_similarity(batched_pred_tensor, batched_target_tensor)
+        
+        # print("#### 5 ####")
+        # print("torch.cuda.memory_allocated: %fGB"%(torch.cuda.memory_allocated(0)/1024/1024/1024))
+        # print("torch.cuda.memory_reserved: %fGB"%(torch.cuda.memory_reserved(0)/1024/1024/1024))
+        # print("torch.cuda.max_memory_reserved: %fGB"%(torch.cuda.max_memory_reserved(0)/1024/1024/1024))
 
         results.append([
             param_dict['model_name'], 
