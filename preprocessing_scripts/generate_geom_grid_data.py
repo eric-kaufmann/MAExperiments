@@ -1,9 +1,7 @@
 import os
 import numpy as np
 import torch
-import meshio
 import time
-import pandas as pd
 
 from scipy.spatial import ConvexHull, Delaunay
 from scipy.interpolate import griddata
@@ -11,10 +9,11 @@ from scipy.interpolate import griddata
 import warnings
 warnings.filterwarnings("ignore")
 
-GRID_SIZE = 128
-THREASHOLD = 0.1
+GRID_SIZE = 64
+THREASHOLD = 0
 
-INPUT_DIR = "/home/ne34gux/workspace/experiments/data/pinn_blood_flow_geometries"
+# INPUT_DIR = "/home/ne34gux/workspace/experiments/data/pinn_blood_flow_geometries"
+INPUT_DIR = "/home/ne34gux/workspace/experiments/data/geom_point_data"
 OUTPUT_DIR = f"/home/ne34gux/workspace/experiments/data/geom_grid{GRID_SIZE}_data"
 
 def get_vessel_files(directory):
@@ -94,7 +93,7 @@ def interpolate_vectors_to_grid(points, velocities, grid_shape, method='linear')
     
     return grid_velocities
 
-def get_vessel_grid_data(batch, size=(64, 64, 64), method='linear', threashold=0.1):
+def get_vessel_grid_data(batch, size=(64, 64, 64), method='linear', threashold=0):
     points, velocities = batch
     interpolated_velocities = interpolate_vectors_to_grid(
         np.array(points), 
@@ -108,17 +107,21 @@ def get_vessel_grid_data(batch, size=(64, 64, 64), method='linear', threashold=0
 
 if __name__ == '__main__':
     start_time = time.time()
-    test_geometry_files = [f for f in os.listdir(INPUT_DIR) if "velocities" in f]
+    test_geometry_files = [f for f in os.listdir(INPUT_DIR)]
     for g_idx, g in enumerate(test_geometry_files):
         g_file_path = os.path.join(INPUT_DIR, g)
         
-        print(f"Processing vessel {g_idx + 1}/{len(test_geometry_files)}")
+        print(f"Processing vessel {g} ({g_idx + 1}/{len(test_geometry_files)})")
         
-        g_object = pd.read_csv(g_file_path).to_numpy()
+        # g_object = pd.read_csv(g_file_path).to_numpy()
         
-        fluid_points = g_object[:,4:7]
-        sys_vel = g_object[:,0:3]
-        mesh_points = meshio.read(g_file_path.replace('velocities.csv', 'wall.stl')).points
+        # fluid_points = g_object[:,4:7]
+        # sys_vel = g_object[:,0:3]
+        # mesh_points = meshio.read(g_file_path.replace('velocities.csv', 'wall.stl')).points
+
+        fluid_points = np.load(g_file_path)['fluid_points']
+        sys_vel = np.load(g_file_path)['sys_vel']
+        mesh_points = np.load(g_file_path)['mesh_points']
         
         # transform the fluid points to the unit cube
         fluid_points, mesh_points = unit_cube(fluid_points, mesh_points=mesh_points)
@@ -140,20 +143,18 @@ if __name__ == '__main__':
             threashold=THREASHOLD
         )
         
-        # save the grid data
-        
-        filename = f"{g.split('_')[0]}.npz"
-        
+        # save the grid data        
         if not os.path.exists(OUTPUT_DIR):
             os.makedirs(OUTPUT_DIR)
         
         np.savez_compressed(
-            os.path.join(OUTPUT_DIR, filename), 
+            os.path.join(OUTPUT_DIR, g),
             vessel_mask=vessel_mask, 
             interp_vel=interp_vel,
             mesh_points=mesh_points
         )
         print(f"  current duration: {time.time() - start_time} seconds")
+        
     
     end_time = time.time()
     duration = end_time - start_time
