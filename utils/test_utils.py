@@ -16,15 +16,15 @@ def load_model_weights(model, model_path):
     return model
 
 def decode_model_name(model_name):
-    model_split = model_name.split('_')
+    model_split = model_name.split('.')[0].split('_')# model_name.split('_')
     # Remove the model name (wait for double underscore)
     model_split = model_split[model_split.index('')+1:]
     model_dict = {
         'lr': float('0.'+model_split[1]),
         'ep': int(model_split[3]),
         'transf': model_split[5],
-        'rot': bool(model_split[7]),
-        'loss': model_split[8]
+        'rot': True if model_split[7]=="True" else False,
+        'loss': model_split[9]
     }
     return model_dict
 
@@ -86,9 +86,11 @@ def get_model(param_dict, model_dict):
 def evaluate_model(model_path, param_dict):
     model_dict = decode_model_name(model_path)
     
-    # if model_dict['transf'] == 'rel':
-    #     print("   >> Skipped")
-    #     return pd.DataFrame()
+    if model_dict['rot']:
+        print("ROT!!")
+    
+    if (model_dict['transf'] == 'grid128'):
+        print("GRID128!!")
     
     transform_function = transform_function_mapping[model_dict['transf']]
 
@@ -109,6 +111,8 @@ def evaluate_model(model_path, param_dict):
     for i, (filename, file_path) in enumerate(test_files):
         print(f" - {i}: {filename}")
         test_object = np.load(file_path+".npz")
+        if filename == 'bifurication':
+            print()
                     
         vessel_dict = {
             'fluid_points': 'fluid_points',
