@@ -183,10 +183,11 @@ class VesselDatasetRelativeSinglePoint(Dataset):
     
     
 class VesselGridSinglePointData(Dataset):
-    def __init__(self, data_path, sample_size=256, transform_function=transform_linear):
+    def __init__(self, data_path, sample_size=256, transform_function=transform_linear, sample_cap=None):
         self.data_path = data_path
         self.transform_function = transform_function
         self.sample_size = sample_size
+        self.sample_cap = sample_cap
         self.vessel_files = get_vessel_files(data_path)
         self.num_vessels = len(self.vessel_files)
         self.input_data = []
@@ -209,11 +210,24 @@ class VesselGridSinglePointData(Dataset):
             geom_array = input_array[torch.all(target_array != 0, dim=1)]
             
             input_array, target_array, geom_array = self.transform_function(input_array, target_array, geom_array)
+            
+            if self.sample_cap:
+                mask = torch.all(target_array == 0, dim=1)
+                valid_indices = np.where(~mask)[0]
+                if target_array.shape[0] < self.sample_cap:
+                    mask_indices = np.arange(target_array.shape[0])
+                elif len(valid_indices) < self.sample_cap:
+                    additional_indices = np.random.choice(np.where(mask)[0], self.sample_cap - len(valid_indices), replace=False)
+                    mask_indices = np.concatenate([valid_indices, additional_indices])
+                else:
+                    mask_indices = np.random.choice(valid_indices, self.sample_cap, replace=False)
+                input_array = input_array[mask_indices]
+                target_array = target_array[mask_indices]
 
             self.input_data.append(input_array)
             self.target_data.append(target_array)
             self.ref_idx.append(np.repeat(file_idx, input_array.shape[0]))
-            sample_idx = np.random.choice(input_array.shape[0], self.sample_size, replace=False)
+            sample_idx = np.random.choice(geom_array.shape[0], self.sample_size, replace=False)
             self.ref_data.append(input_array[sample_idx])
 
         self.input_data = np.concatenate(self.input_data, axis=0)
