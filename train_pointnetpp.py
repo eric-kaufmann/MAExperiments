@@ -12,7 +12,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 from utils.datasets import *
 from utils.helper_functions import *
-from utils.pointnet2_utils import PointNet2_2
+from utils.pointnet2_utils import PointNet2_2, PointNet2
 
 DATA_PATH = "/home/ne34gux/workspace/experiments/data/vessel_point_data"
 MODEL_PATH = "/home/ne34gux/workspace/experiments/trained_models"
@@ -24,22 +24,22 @@ SAMPLE_SIZE = 2048
 IN_CHANNELS = 3
 
 # Experiment Parameters
-UNIT_CUBE = True
+UNIT_CUBE = False
 ZERO_CENTER = False
 GRID64 = False
 GRID128 = False
-RELATIVE_INPUT = False
+RELATIVE_INPUT = True
 
 ROTATE = False
 NSLOSS = False
 
 # Training Parameters
 NUM_EPOCHS = 1
-BATCH_SIZE = 4
-LEARNING_RATE = 0.001
+BATCH_SIZE = 1
+LEARNING_RATE = 0.1
 SPLIT_RATIO = 0.8
-LOG_EVERY = 5
-NUM_WORKERS = 2
+LOG_EVERY = 1
+NUM_WORKERS = 1
 SAVE_MODEL = True
 
 # Adapt Logic based on Parameters
@@ -193,7 +193,8 @@ def train(args):
 
     # Model, loss function, optimizer
     print("Initializing model...")
-    model = PointNet2_2(c_in=3, c_out=3)
+    #model = PointNet2_2(c_in=3, c_out=3)
+    model = PointNet2(c_in=IN_CHANNELS, c_out=3)
     model.to(DEVICE)
 
     criterion = nn.MSELoss()

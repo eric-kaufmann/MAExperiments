@@ -33,18 +33,18 @@ OUTPUT_SIZE = 3*SAMPLE_SIZE
 #TODO: Model takes way too long to train. Investigate why.
 
 # Experiment Parameters
-UNIT_CUBE = False
-ZERO_CENTER = True
+UNIT_CUBE = True
+ZERO_CENTER = False
 GRID64 = False
 GRID128 = False
 RELATIVE_INPUT = False
 
-ROTATE = True
+ROTATE = False
 NSLOSS = False
 
 # Training Parameters
 NUM_EPOCHS = 1
-BATCH_SIZE = 512
+BATCH_SIZE = 256
 LEARNING_RATE = 0.001
 SPLIT_RATIO = 0.8
 LOG_EVERY = 1000
@@ -96,12 +96,12 @@ if args.rotate is not None:
     else:
         raise ValueError("Invalid rotation type.")
     
-SAMPLE_CAP = 1_000_000
+SAMPLE_CAP = 500_000
 
 if ROTATE:
     DATA_PATH = "/home/ne34gux/workspace/experiments/data/rotated_vessel_point_data"
     LOG_EVERY *= 10
-    SAMPLE_CAP = 10_000_000
+    SAMPLE_CAP = 500_000
 
 assert sum([UNIT_CUBE, ZERO_CENTER, GRID64, GRID128, RELATIVE_INPUT]) == 1, "Exactly one transformation should be enabled."
 assert sum([GRID64, GRID128, ROTATE]) <= 1, "Grid and rotation cannot be enabled at the same time."
@@ -120,6 +120,7 @@ elif GRID128:
     TRANSF = 'grid128'
     DATA_PATH = "/home/ne34gux/workspace/experiments/data/vessel_grid128_data"
     transform_function = transform_unit_cube
+    SAMPLE_CAP = 100_000
 elif RELATIVE_INPUT:
     TRANSF = 'rel'
     DATA_PATH = "/home/ne34gux/workspace/experiments/data/vessel_relative_data"
@@ -183,7 +184,7 @@ def train(args):
     
     print("Loading data...")
     if GRID64 or GRID128:
-        vessel_dataset = VesselGridSinglePointData(DATA_PATH, sample_size=ENCODER_SAMPLE_SIZE, transform_function=transform_function)
+        vessel_dataset = VesselGridSinglePointData(DATA_PATH, sample_size=ENCODER_SAMPLE_SIZE, transform_function=transform_function, sample_cap=SAMPLE_CAP)
     elif RELATIVE_INPUT:
         vessel_dataset = VesselDatasetRelativeSinglePoint(DATA_PATH, sample_size=ENCODER_SAMPLE_SIZE, transform_function=transform_function)
     else:

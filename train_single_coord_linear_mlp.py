@@ -26,10 +26,10 @@ HIDDEN_SIZE = [8, 8, 8, 4]
 OUTPUT_SIZE = 3*SAMPLE_SIZE
 
 # Experiment Parameters
-UNIT_CUBE = True
+UNIT_CUBE = False
 ZERO_CENTER = False
 GRID64 = False
-GRID128 = False
+GRID128 = True
 RELATIVE_INPUT = False
 
 ROTATE = False
@@ -113,6 +113,8 @@ elif GRID128:
     TRANSF = 'grid128'
     DATA_PATH = "/home/ne34gux/workspace/experiments/data/vessel_grid128_data"
     transform_function = transform_unit_cube
+    SAMPLE_CAP = 100_000
+    
 elif RELATIVE_INPUT:
     TRANSF = 'rel'
     DATA_PATH = "/home/ne34gux/workspace/experiments/data/vessel_relative_data"
@@ -173,7 +175,7 @@ def train(args):
     
     print("Loading data...")
     if GRID64 or GRID128:
-        vessel_dataset = VesselGridSinglePointData(DATA_PATH, transform_function=transform_function)
+        vessel_dataset = VesselGridSinglePointData(DATA_PATH, transform_function=transform_function, sample_size=1, sample_cap=SAMPLE_CAP)
     elif RELATIVE_INPUT:
         vessel_dataset = VesselDatasetRelativeSinglePoint(DATA_PATH, sample_size=SAMPLE_SIZE, transform_function=transform_function)
     else:
