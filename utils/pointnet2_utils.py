@@ -340,6 +340,7 @@ class PointNetFeaturePropagation(nn.Module):
 class PointNet2(nn.Module):
     def __init__(self, c_in, c_out):
         super(PointNet2, self).__init__()
+        # self.sa1 = PointNetSetAbstraction(1024, 0.1, 32, c_in + 3, [32, 32, 64], False)
         self.sa1 = PointNetSetAbstraction(1024, 0.1, 32, c_in + 3, [32, 32, 64], False)
         self.sa2 = PointNetSetAbstraction(256, 0.2, 32, 64 + 3, [64, 64, 128], False)
         self.sa3 = PointNetSetAbstraction(64, 0.4, 32, 128 + 3, [128, 128, 256], False)
@@ -353,16 +354,23 @@ class PointNet2(nn.Module):
         self.drop1 = nn.Dropout(0.5)
         self.conv2 = nn.Conv1d(128, c_out, 1)
         self.lin1_1 = nn.Linear(8192+48, 8192)
-        #self.lin1_2 = nn.Linear(8192, 8192)
+        self.lin1_2 = nn.Linear(8192, 8192)
+        self.lin1_3 = nn.Linear(8192, 8192)
         self.lin2_1 = nn.Linear(16384+192, 16384)
-        #self.lin2_2 = nn.Linear(16384, 16384)
+        self.lin2_2 = nn.Linear(16384, 16384)
+        self.lin2_3 = nn.Linear(16384, 16384)
         
-        self.final_lin = nn.Linear(8192, 8192)
-        self.final_lin2 = nn.Linear(8192, 8192)
+        self.final_lin1 = nn.Linear(6144, 6144)
+        self.final_lin2 = nn.Linear(6144, 6144)
+        self.final_lin3 = nn.Linear(6144, 6144)
+        self.final_relu = nn.ReLU()
 
     def forward(self, xyz):
-        l0_points = xyz
-        l0_xyz = xyz[:,:3,:]
+        #l0_points = xyz
+        #l0_xyz = xyz[:,:3,:]
+        
+        l0_points = xyz.permute(0, 2, 1)
+        l0_xyz = xyz[:,:,:3].permute(0, 2, 1)
 
         # print(f"l0_points shape: {l0_points.shape}")
         # print(f"l0_xyz shape: {l0_xyz.shape}")
@@ -374,13 +382,15 @@ class PointNet2(nn.Module):
         
         l4_flat = torch.concatenate([l4_points.flatten(start_dim=1), l4_xyz.flatten(start_dim=1)], dim=1)
         lin1_1_out = F.relu(self.lin1_1(l4_flat))
-        #lin1_2_out = F.relu(self.lin1_2(lin1_1_out))
-        l4_points = lin1_1_out.reshape_as(l4_points)
+        lin1_2_out = F.relu(self.lin1_2(lin1_1_out))
+        lin1_3_out = F.relu(self.lin1_3(lin1_2_out))
+        l4_points = lin1_3_out.reshape_as(l4_points)
 
         l3_flat = torch.concatenate([l3_points.flatten(start_dim=1), l3_xyz.flatten(start_dim=1)], dim=1)
         lin2_1_out = F.relu(self.lin2_1(l3_flat))
-        #lin2_2_out = F.relu(self.lin2_2(lin2_1_out))
-        l3_points = lin2_1_out.reshape_as(l3_points)
+        lin2_2_out = F.relu(self.lin2_2(lin2_1_out))
+        lin2_3_out = F.relu(self.lin2_3(lin2_2_out))
+        l3_points = lin2_3_out.reshape_as(l3_points)
 
         l3_points = self.fp4(l3_xyz, l4_xyz, l3_points, l4_points)
         l2_points = self.fp3(l2_xyz, l3_xyz, l2_points, l3_points)
@@ -391,12 +401,14 @@ class PointNet2(nn.Module):
         x = self.conv2(x)
         #x = F.log_softmax(x, dim=1)
         x = x.permute(0, 2, 1)
+        x_final_shape = x.shape
         
-        # x = self.lin1(x)
-        # x = self.lin2(x)
-        # x = self.lin3(x)
+        # x = self.final_relu(self.final_lin1(x.flatten(start_dim=1)))
+        # x = self.final_relu(self.final_lin2(x))
+        # x = self.final_lin3(x)
+        x = self.final_lin3(x.flatten(start_dim=1))
         
-        return x, l4_points
+        return x.reshape(x_final_shape)#, l4_points
     
     
 class PointNet2_2(nn.Module):
