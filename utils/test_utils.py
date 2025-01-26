@@ -5,9 +5,11 @@ import pandas as pd
 from utils.metrics import *
 from utils.helper_functions import *
 from utils.models import *
-from utils.pointnet2_utils import PointNet2_2
+from utils.pointnet2_utils import PointNet2_2, PointNet2
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+
+SAVE_POINT_RESULTS = False
 
 def load_model_weights(model, model_path):
     state_dict = torch.load(model_path, map_location=torch.device(DEVICE))
@@ -28,8 +30,9 @@ def decode_model_name(model_name):
     }
     return model_dict
 
-def save_results(results, name):
-    result_path = "/home/ne34gux/workspace/experiments/results"
+def save_results(results, name, result_path=None):
+    if result_path is None:
+        result_path = "/home/ne34gux/workspace/experiments/results"
     results.to_csv(
         os.path.join(result_path, name+".csv"), 
         index=False
@@ -79,18 +82,12 @@ def get_model(param_dict, model_dict):
         decoder = PointNetDecoder(z_size=64, out_dim=param_dict['sample_size'])
         model = PointNet(encoder=encoder, decoder=decoder)
     elif param_dict['model_name'] == 'pointnetpp':
-        model = PointNet2_2(c_in=3 if model_dict['transf'] != 'rel' else 8, c_out=3)
+        model = PointNet2(c_in=3 if model_dict['transf'] != 'rel' else 8, c_out=3)
     
     return model
         
 def evaluate_model(model_path, param_dict):
     model_dict = decode_model_name(model_path)
-    
-    if model_dict['rot']:
-        print("ROT!!")
-    
-    if (model_dict['transf'] == 'grid128'):
-        print("GRID128!!")
     
     transform_function = transform_function_mapping[model_dict['transf']]
 
@@ -111,9 +108,7 @@ def evaluate_model(model_path, param_dict):
     for i, (filename, file_path) in enumerate(test_files):
         print(f" - {i}: {filename}")
         test_object = np.load(file_path+".npz")
-        if filename == 'bifurication':
-            print()
-                    
+
         vessel_dict = {
             'fluid_points': 'fluid_points',
             'sys_vel': 'sys_vel',
@@ -137,6 +132,9 @@ def evaluate_model(model_path, param_dict):
         # print("torch.cuda.memory_reserved: %fGB"%(torch.cuda.memory_reserved(0)/1024/1024/1024))
         # print("torch.cuda.max_memory_reserved: %fGB"%(torch.cuda.max_memory_reserved(0)/1024/1024/1024))
         
+        # if ("single_coord_linear_encoder__lr_1_ep_30_transf_unitcube_rot_False_loss_mse" in model_path) and ("cylinder" in filename):
+        #     print("STOP")
+        
         # Load the data
         if 'linear_encoder' in param_dict['model_name']:
             xyz = torch.Tensor(test_object[vessel_dict['fluid_points']])
@@ -145,6 +143,10 @@ def evaluate_model(model_path, param_dict):
                 geom = xyz[:,:3]
             elif model_dict['transf'] == 'grid64' or model_dict['transf'] == 'grid128':
                 xyz, vel = grid_to_point_cloud(xyz, vel)
+                
+                # get only the points with non-zero velocity
+                # xyz = xyz[zero_vel_idx]
+                # vel = vel[zero_vel_idx]
                 geom = xyz[torch.all(vel != 0, dim=1)]
             else:
                 geom = torch.Tensor(test_object[vessel_dict['mesh_points']])
@@ -217,14 +219,46 @@ def evaluate_model(model_path, param_dict):
         else:
             batched_pred_tensor = model(batched_input_tensor)
         
+        batched_input_tensor = batched_input_tensor.view(-1, in_channels)
+        batched_target_tensor = batched_target_tensor.view(-1, 3)
+        batched_pred_tensor = batched_pred_tensor.view(-1, 3)  
+            
+        if model_dict['transf'] == 'grid64' or model_dict['transf'] == 'grid128':
+            non_zero_vel_idx = torch.all(batched_target_tensor != 0, dim=1)
+            
+            batched_input_tensor = batched_input_tensor[non_zero_vel_idx]
+            batched_pred_tensor = batched_pred_tensor[non_zero_vel_idx]
+            batched_target_tensor = batched_target_tensor[non_zero_vel_idx]
+        
+        
         mse = mse_error(batched_pred_tensor, batched_target_tensor)
         mae = mae_error(batched_pred_tensor, batched_target_tensor)
         cs = cosine_similarity(batched_pred_tensor, batched_target_tensor)
+        angle_diff = calculate_angle_difference(batched_pred_tensor, batched_target_tensor)
         
         # print("#### 5 ####")
         # print("torch.cuda.memory_allocated: %fGB"%(torch.cuda.memory_allocated(0)/1024/1024/1024))
         # print("torch.cuda.memory_reserved: %fGB"%(torch.cuda.memory_reserved(0)/1024/1024/1024))
         # print("torch.cuda.max_memory_reserved: %fGB"%(torch.cuda.max_memory_reserved(0)/1024/1024/1024))
+        
+        
+        if SAVE_POINT_RESULTS:
+            save_path = "/home/ne34gux/workspace/experiments/results/point_results"
+            save_path = os.path.join(save_path, param_dict['model_name'])
+            save_path = os.path.join(save_path, model_dict['transf'])
+            
+            save_filename = str(filename.replace(".npz", "")) + "__" + model_path.split("/")[-1].replace(".pth", "") + ".npz"
+            
+            if not os.path.exists(save_path):
+                os.makedirs(save_path)
+                
+            np.savez(
+                os.path.join(save_path, save_filename),
+                input=batched_input_tensor.cpu().detach().numpy(),
+                target=batched_target_tensor.cpu().detach().numpy(),
+                pred=batched_pred_tensor.cpu().detach().numpy(),
+                model_path=model_path
+            )
 
         results.append([
             param_dict['model_name'], 
@@ -236,8 +270,24 @@ def evaluate_model(model_path, param_dict):
             model_dict['loss'], 
             mse, 
             mae, 
-            cs
+            cs,
+            angle_diff
         ])
 
-    results_df = pd.DataFrame(data=results, columns=["Model_Name", "Case", "Learning_Rate", "Epochs", "Transformation", "Rotation", "Loss_Function", "MSE", "MAE", "Cosine_Similarity"])
+    results_df = pd.DataFrame(
+        data=results, 
+        columns=[
+            "Model_Name", 
+            "Case", 
+            "Learning_Rate", 
+            "Epochs", 
+            "Transformation",
+            "Rotation",
+            "Loss_Function", 
+            "MSE", 
+            "MAE", 
+            "Cosine_Similarity",
+            "Angle_Difference"
+        ]
+    )
     return results_df

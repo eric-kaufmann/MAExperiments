@@ -89,6 +89,46 @@ class VesselGridData(Dataset):
         
         return grid, point_vel
     
+class VesselGridData2(Dataset):
+    def __init__(self, data_path):
+        self.data_path = data_path
+        self.vessel_files = get_vessel_files(data_path)
+        self.num_vessels = len(self.vessel_files)
+    
+    def __len__(self): 
+        return self.num_vessels
+    
+    def __getitem__(self, index):
+        vessel_file = self.vessel_files[index]
+        fluid_data = np.load(vessel_file)
+       
+        grid_xyz = fluid_data['vessel_mask']
+        grid_vel = fluid_data['interp_vel']
+        
+        return grid_xyz, grid_vel
+
+class VesselGridCondData(Dataset):
+    def __init__(self, data_path):
+        self.data_path = data_path
+        self.vessel_files = get_vessel_files(data_path)
+        self.condition_files = get_vessel_files("/home/ne34gux/workspace/experiments/data/vessel_cond_data")
+        self.num_vessels = len(self.vessel_files)
+    
+    def __len__(self): 
+        return self.num_vessels
+    
+    def __getitem__(self, index):
+        vessel_file = self.vessel_files[index]
+        cond_file = self.condition_files[index]
+        fluid_data = np.load(vessel_file)
+        cond_data = np.load(cond_file)
+       
+        grid_xyz = fluid_data['vessel_mask']
+        grid_vel = fluid_data['interp_vel']
+        cond_array = cond_data['condition_array']
+        
+        return grid_xyz, grid_vel, cond_array
+
     
 # Single Point Classes
 

@@ -1,6 +1,7 @@
 import torch
 import numpy as np
 import torch.nn as nn
+import torch.nn.functional as F
 
 class MLP(nn.Module):
     def __init__(self, layer_sizes):
@@ -140,3 +141,135 @@ class PointNet(nn.Module):
         )
         
         return x_hat
+
+class ConvVAE(nn.Module):
+    def __init__(self, batch_size, grid=64, cond_dim=0):
+        super(ConvVAE, self).__init__()
+        self.batch_size = batch_size
+        self.grid = grid
+        
+        self.flatten = nn.Flatten()
+        self.encoder = self.get_encoder()
+        self.decoder = self.get_decoder()
+        self.after_cond_encoder = nn.Sequential(
+            nn.Linear(131072+cond_dim, 512),
+            nn.ReLU()
+        )
+        self.pre_cond_decoder = nn.Sequential(
+            nn.Linear(256+cond_dim, 131072),
+            nn.ReLU()
+        )
+        
+    def get_encoder(self):
+        if self.grid == 64:
+            encoder_header = nn.Sequential(
+                nn.Conv3d(1, 16, kernel_size=3, stride=2, padding=1),
+                nn.ReLU(),
+                nn.BatchNorm3d(16),
+            )
+        else:
+            encoder_header = nn.Sequential(
+                nn.Conv3d(1, 3, kernel_size=3, stride=2, padding=1),
+                nn.ReLU(),
+                nn.Conv3d(3, 16, kernel_size=3, stride=2, padding=1),
+                nn.ReLU(),
+                nn.BatchNorm3d(16),
+            )    
+        encoder = nn.Sequential(
+            encoder_header,
+            nn.Conv3d(16, 32, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(),
+            nn.BatchNorm3d(32),
+            nn.Conv3d(32, 64, kernel_size=3, stride=2, padding=1),
+            nn.ReLU(),
+            nn.BatchNorm3d(64),
+            nn.Conv3d(64, 96, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(),
+            nn.BatchNorm3d(96),
+            nn.Conv3d(96, 128, kernel_size=3, stride=2, padding=1),
+            nn.ReLU(),
+            nn.BatchNorm3d(128),
+            nn.Conv3d(128, 192, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(),
+            nn.BatchNorm3d(192),
+            nn.Conv3d(192, 256, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(),
+            nn.BatchNorm3d(256),
+        )
+        return encoder
+    
+    def get_decoder(self):
+        if self.grid == 64:
+            decoder_footer = nn.Sequential(
+                nn.Conv3d(16, 3, kernel_size=3, stride=1, padding=1),
+                nn.BatchNorm3d(3),
+            )
+        else:
+            decoder_footer = nn.Sequential(
+                nn.Conv3d(16, 3, kernel_size=3, stride=1, padding=1),
+                nn.BatchNorm3d(3),
+                nn.ReLU(inplace=True),
+                nn.ConvTranspose3d(3, 3, kernel_size=4, stride=2, padding=1),
+                nn.BatchNorm3d(3),
+            )
+                
+
+        decoder = nn.Sequential(
+            nn.Conv3d(256, 192, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm3d(192),
+            nn.ReLU(inplace=True),
+            nn.Conv3d(192, 128, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm3d(128),
+            nn.ReLU(inplace=True),
+            nn.Conv3d(128, 96, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm3d(96),
+            nn.ReLU(inplace=True),
+            nn.Conv3d(96, 64, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm3d(64),
+            nn.ReLU(inplace=True),
+            nn.Conv3d(64, 32, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm3d(32),
+            nn.ReLU(inplace=True),
+            nn.Conv3d(32, 16, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm3d(16),
+            nn.ReLU(inplace=True),
+            decoder_footer
+        )
+        return decoder
+
+    def forward(self, x, cond_tensor=torch.tensor([])):
+       
+        # encoder
+        x = self.encoder(x.unsqueeze(1))
+        
+        # add conditioning variables to feature vector
+        x = torch.concat([self.flatten(x), cond_tensor], axis=1)
+        
+        # put new feature vector through the after_cond_encoder
+        x = self.after_cond_encoder(x)
+        
+        # reparameterize
+        mu, log_var = torch.chunk(x, 2, dim=1)
+        std = torch.exp(0.5 * log_var)
+        eps = torch.randn_like(std)
+        z = mu + eps * std
+
+        # add conditioning variables to z
+        z = torch.concat([z, cond_tensor], axis=1)
+        
+        # put z through the pre_cond_decoder
+        z = self.pre_cond_decoder(z)
+        
+        # reshape z to block shape
+        z = torch.reshape(z, (self.batch_size, 256, 8, 8, 8))
+        
+        # put new block shaped z through the decoder
+        z = F.interpolate(z, scale_factor=2, mode='trilinear', align_corners=False)
+        z = self.decoder[0:3](z)
+        z = self.decoder[3:6](z)
+        z = F.interpolate(z, scale_factor=2, mode='trilinear', align_corners=False)
+        z = self.decoder[6:9](z)
+        z = self.decoder[9:12](z)
+        z = F.interpolate(z, scale_factor=2, mode='trilinear', align_corners=False)
+        z = self.decoder[12:](z)
+        return z, mu, log_var
