@@ -5,9 +5,8 @@ import time
 import numpy as np
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 import torch.optim as optim
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
 from utils.datasets import *
@@ -106,12 +105,10 @@ elif ZERO_CENTER:
 elif GRID64:
     TRANSF = 'grid64'
     DATA_PATH = "/home/ne34gux/workspace/experiments/data/vessel_grid64_data"
-    # No adaptation of sample size because of memory constraints
     transform_function = transform_unit_cube
 elif GRID128:
     TRANSF = 'grid128'
     DATA_PATH = "/home/ne34gux/workspace/experiments/data/vessel_grid128_data"
-    # No adaptation of sample size because of memory constraints
     transform_function = transform_unit_cube
 elif RELATIVE_INPUT:
     TRANSF = 'rel'
@@ -202,8 +199,10 @@ def train(args):
     best_val_loss = float('inf')
     for epoch in range(NUM_EPOCHS):
         epoch_start_time = time.time()
-        model.train()
         epoch_mse_list = []
+        
+        # Training
+        model.train()
         for i, (input_tensor, target_tensor) in enumerate(train_loader):
             input_tensor = input_tensor.to(DEVICE)
             target_tensor = target_tensor.to(DEVICE)
@@ -218,6 +217,7 @@ def train(args):
             writer.add_scalar('Train/MSE/step', loss.item(), epoch*len(train_loader)+i)
             epoch_mse_list.append(loss.item())
             
+            # print step progress
             step_id = i+1
             if (step_id) % LOG_EVERY == 0:
                 now = time.time()
@@ -228,6 +228,7 @@ def train(args):
         epoch_mse = np.mean(epoch_mse_list)
         writer.add_scalar('Train/MSE/epoch', epoch_mse, epoch)
 
+        # Validation
         model.eval()
         val_loss = 0
         with torch.no_grad():  # Disable gradient computation
@@ -244,10 +245,14 @@ def train(args):
 
         val_loss /= len(val_loader)  # Average validation loss
         writer.add_scalar('Validation/MSE/Epoch', val_loss, epoch)
+        
+        # Print epoch statistics
         epoch_duration = time.time() - epoch_start_time
         elapsed_time = time.time() - start_time
         remaining_time = (elapsed_time / (epoch + 1)) * (NUM_EPOCHS - epoch - 1)
         print(f'Epoch [{epoch+1}/{NUM_EPOCHS}], Validation Loss: {val_loss:.4f}, Epoch Duration: {epoch_duration:.2f}s, Remaining Time: {remaining_time:.2f}s')
+        
+        # Save model if validation loss is the best so far
         if SAVE_MODEL and (val_loss < best_val_loss):
             best_val_loss = val_loss
             model_filepath = os.path.join(MODEL_PATH, SAVE_MODEL_NAME)

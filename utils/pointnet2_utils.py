@@ -1,3 +1,9 @@
+"""
+Most of the code in this file is taken from the following repository:
+    https://github.com/yanx27/Pointnet_Pointnet2_pytorch/tree/master
+The PointNet++ Model was adapted for blood flow prediction. 
+"""
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -181,6 +187,26 @@ def sample_and_group_all(xyz, points):
 
 
 class PointNetSetAbstraction(nn.Module):
+    """
+    PointNetSetAbstraction is a module for point cloud feature learning with set abstraction.
+    Args:
+        npoint (int): Number of points to sample.
+        radius (float): Radius of the ball query.
+        nsample (int): Number of samples in each ball query.
+        in_channel (int): Number of input channels.
+        mlp (list of int): List of output sizes for MLP layers.
+        group_all (bool): Whether to group all points.
+    Methods:
+        forward(xyz, points):
+            Forward pass of the module.
+            Args:
+                xyz (torch.Tensor): Input point cloud positions, shape (B, N, 3).
+                points (torch.Tensor): Input point cloud features, shape (B, N, D).
+            Returns:
+                new_xyz (torch.Tensor): Sampled points positions, shape (B, npoint, 3).
+                new_points (torch.Tensor): Sampled points features, shape (B, mlp[-1], npoint).
+    """
+    
     def __init__(self, npoint, radius, nsample, in_channel, mlp, group_all):
         super(PointNetSetAbstraction, self).__init__()
         self.npoint = npoint
@@ -196,14 +222,6 @@ class PointNetSetAbstraction(nn.Module):
         self.group_all = group_all
 
     def forward(self, xyz, points):
-        """
-        Input:
-            xyz: input points position data, [B, C, N]
-            points: input points data, [B, D, N]
-        Return:
-            new_xyz: sampled points position data, [B, C, S]
-            new_points_concat: sample points feature data, [B, D', S]
-        """
         xyz = xyz.permute(0, 2, 1)
         if points is not None:
             points = points.permute(0, 2, 1)
@@ -225,6 +243,24 @@ class PointNetSetAbstraction(nn.Module):
 
 
 class PointNetSetAbstractionMsg(nn.Module):
+    """
+    PointNetSetAbstractionMsg is a class for PointNet++ set abstraction with multi-scale grouping (MSG).
+    Args:
+        npoint (int): Number of points to sample.
+        radius_list (list of float): List of radii for ball query in each scale.
+        nsample_list (list of int): List of number of samples in each ball query.
+        in_channel (int): Number of input channels.
+        mlp_list (list of list of int): List of MLP layers for each scale.
+    Methods:
+        forward(xyz, points):
+            Forward pass of the network.
+            Args:
+                xyz (torch.Tensor): Input points position data, shape [B, C, N].
+                points (torch.Tensor): Input points data, shape [B, D, N].
+            Returns:
+                new_xyz (torch.Tensor): Sampled points position data, shape [B, C, S].
+                new_points_concat (torch.Tensor): Sampled points feature data, shape [B, D', S].
+    """
     def __init__(self, npoint, radius_list, nsample_list, in_channel, mlp_list):
         super(PointNetSetAbstractionMsg, self).__init__()
         self.npoint = npoint
@@ -338,9 +374,46 @@ class PointNetFeaturePropagation(nn.Module):
     
     
 class PointNet2(nn.Module):
+    """
+    PointNet2 is a neural network model for point cloud feature learning and segmentation.
+    Args:
+        c_in (int): Number of input channels.
+        c_out (int): Number of output channels.
+    Attributes:
+        sa1 (PointNetSetAbstraction): Set abstraction layer 1.
+        sa2 (PointNetSetAbstraction): Set abstraction layer 2.
+        sa3 (PointNetSetAbstraction): Set abstraction layer 3.
+        sa4 (PointNetSetAbstraction): Set abstraction layer 4.
+        fp4 (PointNetFeaturePropagation): Feature propagation layer 4.
+        fp3 (PointNetFeaturePropagation): Feature propagation layer 3.
+        fp2 (PointNetFeaturePropagation): Feature propagation layer 2.
+        fp1 (PointNetFeaturePropagation): Feature propagation layer 1.
+        conv1 (nn.Conv1d): Convolutional layer 1.
+        bn1 (nn.BatchNorm1d): Batch normalization layer 1.
+        drop1 (nn.Dropout): Dropout layer.
+        conv2 (nn.Conv1d): Convolutional layer 2.
+        lin1_1 (nn.Linear): Linear layer 1 for l4 points.
+        lin1_2 (nn.Linear): Linear layer 2 for l4 points.
+        lin1_3 (nn.Linear): Linear layer 3 for l4 points.
+        lin2_1 (nn.Linear): Linear layer 1 for l3 points.
+        lin2_2 (nn.Linear): Linear layer 2 for l3 points.
+        lin2_3 (nn.Linear): Linear layer 3 for l3 points.
+        final_lin1 (nn.Linear): Final linear layer 1.
+        final_lin2 (nn.Linear): Final linear layer 2.
+        final_lin3 (nn.Linear): Final linear layer 3.
+        final_relu (nn.ReLU): ReLU activation function.
+    Methods:
+        forward(xyz):
+            Forward pass of the network.
+            Args:
+                xyz (torch.Tensor): Input point cloud data of shape (B, N, C), where B is the batch size, 
+                                    N is the number of points, and C is the number of channels.
+            Returns:
+                torch.Tensor: Output features of the network.
+    """
+    
     def __init__(self, c_in, c_out):
         super(PointNet2, self).__init__()
-        # self.sa1 = PointNetSetAbstraction(1024, 0.1, 32, c_in + 3, [32, 32, 64], False)
         self.sa1 = PointNetSetAbstraction(1024, 0.1, 32, c_in + 3, [32, 32, 64], False)
         self.sa2 = PointNetSetAbstraction(256, 0.2, 32, 64 + 3, [64, 64, 128], False)
         self.sa3 = PointNetSetAbstraction(64, 0.4, 32, 128 + 3, [128, 128, 256], False)
@@ -366,14 +439,9 @@ class PointNet2(nn.Module):
         self.final_relu = nn.ReLU()
 
     def forward(self, xyz):
-        #l0_points = xyz
-        #l0_xyz = xyz[:,:3,:]
         
         l0_points = xyz.permute(0, 2, 1)
         l0_xyz = xyz[:,:,:3].permute(0, 2, 1)
-
-        # print(f"l0_points shape: {l0_points.shape}")
-        # print(f"l0_xyz shape: {l0_xyz.shape}")
 
         l1_xyz, l1_points = self.sa1(l0_xyz, l0_points)
         l2_xyz, l2_points = self.sa2(l1_xyz, l1_points)
@@ -399,84 +467,11 @@ class PointNet2(nn.Module):
 
         x = self.drop1(F.relu(self.bn1(self.conv1(l0_points))))
         x = self.conv2(x)
-        #x = F.log_softmax(x, dim=1)
         x = x.permute(0, 2, 1)
         x_final_shape = x.shape
         
-        # x = self.final_relu(self.final_lin1(x.flatten(start_dim=1)))
-        # x = self.final_relu(self.final_lin2(x))
-        # x = self.final_lin3(x)
         x = self.final_lin3(x.flatten(start_dim=1))
         
         return x.reshape(x_final_shape)#, l4_points
     
-    
-class PointNet2_2(nn.Module):
-    def __init__(self, c_in, c_out):
-        super(PointNet2_2, self).__init__()
-        self.al1 = PointNetSetAbstraction(2**14, 0.01, 64, c_in + 3, [8, 8, 16], False)
-        self.al2 = PointNetSetAbstraction(2**12, 0.08, 64, 16 + 3, [16, 16, 32], False)
-        self.al3 = PointNetSetAbstraction(2**10, 0.1, 64, 32 + 3, [32, 32, 64], False)
-        self.al4 = PointNetSetAbstraction(2**8, 0.2, 64, 64 + 3, [64, 64, 128], False)
-        self.al5 = PointNetSetAbstraction(2**6, 0.4, 64, 128 + 3, [128, 128, 256], False)
-        self.al6 = PointNetSetAbstraction(2**4, 0.6, 64, 256 + 3, [256, 256, 512], False) 
-           
-        self.lin1 = nn.Linear(512*16, 512*16)
-        self.lin2 = nn.Linear(512*16, 512*16)
-        self.lin3 = nn.Linear(512*16, 512*16)
-        self.lin4 = nn.Linear(512*16, 512*16)
-        
-        self.lin_out1 = nn.Linear(3, 3)
-        self.lin_out2 = nn.Linear(3, 3)
-        self.lin_out3 = nn.Linear(3, 3)
-        
-        self.fp6 = PointNetFeaturePropagation(768, [256, 256])
-        self.fp5 = PointNetFeaturePropagation(384, [256, 256])
-        self.fp4 = PointNetFeaturePropagation(320, [256, 128])
-        self.fp3 = PointNetFeaturePropagation(160, [128, 128])
-        self.fp2 = PointNetFeaturePropagation(144, [128, 128])
-        self.fp1 = PointNetFeaturePropagation(128, [128, 64])
-        
-        self.conv1 = nn.Conv1d(64, 32, 1)
-        self.conv2 = nn.Conv1d(32, 16, 1)
-        self.conv3 = nn.Conv1d(16, 8, 1)
-        self.conv4 = nn.Conv1d(8, c_out, 1)
-        
 
-    def forward(self, xyz):
-        p0 = xyz.permute(0, 2, 1)
-        xyz0 = xyz.permute(0, 2, 1)
-
-        xyz1, p1 = self.al1(xyz0, p0)
-        xyz2, p2 = self.al2(xyz1, p1)
-        xyz3, p3 = self.al3(xyz2, p2)
-        xyz4, p4 = self.al4(xyz3, p3)
-        xyz5, p5 = self.al5(xyz4, p4)
-        xyz6, p6 = self.al6(xyz5, p5)
-        
-        x = self.lin1(p6.flatten(start_dim=1))
-        x = self.lin2(x)
-        x = self.lin3(x)
-        #x = self.lin4(x)
-        
-        p6 = x.reshape_as(p6)
-        
-        p5 = self.fp6(xyz5, xyz6, p5, p6)
-        p4 = self.fp5(xyz4, xyz5, p4, p5)
-        p3 = self.fp4(xyz3, xyz4, p3, p4)
-        p2 = self.fp3(xyz2, xyz3, p2, p3)
-        p1 = self.fp2(xyz1, xyz2, p1, p2)
-        p0 = self.fp1(xyz0, xyz1, None, p1)
-
-        x = F.relu(self.conv1(p0))
-        x = F.relu(self.conv2(x))
-        x = F.relu(self.conv3(x))
-        x = F.relu(self.conv4(x))
-        
-        x = x.permute(0, 2, 1)
-        
-        x = F.relu(self.lin_out1(x))
-        x = self.lin_out2(x)
-        #x = F.relu(self.lin_out3(x))
-
-        return x

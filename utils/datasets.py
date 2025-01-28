@@ -3,10 +3,31 @@ from torch.utils.data import Dataset
 
 from utils.helper_functions import *
 
-
-# Data Sample Classes
+#######################
+# Data Sample Classes #
+#######################
 
 class VesselPointCloudData(Dataset):
+    """
+    A PyTorch Dataset class for loading and transforming vessel point cloud data.
+    Args:
+        data_path (str): Path to the directory containing vessel data files.
+        num_samples (int, optional): Number of samples to randomly select from each vessel file. 
+                                     If None, all samples are used. Default is None.
+        transform_function (callable, optional): A function to transform the input and target tensors. 
+                                                 Default is transform_linear.
+    Attributes:
+        data_path (str): Path to the directory containing vessel data files.
+        num_samples (int or None): Number of samples to randomly select from each vessel file.
+        vessel_files (list): List of file paths to the vessel data files.
+        num_vessels (int): Number of vessel data files.
+        transform_function (callable): Function to transform the input and target tensors.
+    Methods:
+        __len__(): Returns the number of vessel data files.
+        __getitem__(index): Loads the vessel data file at the given index, applies sampling if specified,
+                            and transforms the input and target tensors using the transform_function.
+                            Returns the transformed input and target tensors.
+    """
     def __init__(self, data_path, num_samples=None, transform_function=transform_linear):
         self.data_path = data_path
         self.num_samples = num_samples
@@ -31,7 +52,25 @@ class VesselPointCloudData(Dataset):
         return self.transform_function(input_tensor, target_tensor)
     
 
-class VesselRelativePointCloudData(Dataset):
+class VesselRelativePointCloudData(Dataset): # Dataset for Relative Inputs
+    """
+    Dataset class for loading and transforming vessel relative point cloud data.
+    Args:
+        data_path (str): Path to the directory containing vessel data files.
+        num_samples (int, optional): Number of samples to randomly select from each vessel file. 
+                                        If None, all samples are used. Default is None.
+        transform_function (callable, optional): Function to apply transformations to the input and target tensors.
+                                                    Default is transform_linear.
+    Attributes:
+        data_path (str): Path to the directory containing vessel data files.
+        num_samples (int, optional): Number of samples to randomly select from each vessel file.
+        vessel_files (list): List of file paths to the vessel data files.
+        num_vessels (int): Number of vessel data files.
+        transform_function (callable): Function to apply transformations to the input and target tensors.
+    Methods:
+        __len__(): Returns the number of vessel data files.
+        __getitem__(index): Loads and returns the transformed input and target tensors for the specified index.
+    """
     def __init__(self, data_path, num_samples=None, transform_function=transform_linear):
         self.data_path = data_path
         self.num_samples = num_samples
@@ -55,8 +94,23 @@ class VesselRelativePointCloudData(Dataset):
             
         return self.transform_function(input_tensor, target_tensor)
     
-    
-class VesselGridData(Dataset):
+class VesselGridData(Dataset): # Dataset for Grid Inputs
+    """
+    Dataset class for loading and processing vessel grid data.
+    Args:
+        data_path (str): Path to the directory containing vessel data files.
+        filter_zero_velocities (bool, optional): If True, filters out points with zero velocities. Default is False.
+        sample_size (int, optional): Number of samples to return. Default is 4096 (2**12).
+    Attributes:
+        data_path (str): Path to the directory containing vessel data files.
+        vessel_files (list): List of vessel data file paths.
+        num_vessels (int): Number of vessel data files.
+        filter_zero_velocities (bool): If True, filters out points with zero velocities.
+        sample_size (int): Number of samples to return.
+    Methods:
+        __len__(): Returns the number of vessel data files.
+        __getitem__(index): Loads and processes the vessel data file at the given index. Returns the grid and point velocities.
+    """
     def __init__(self, data_path, filter_zero_velocities=False, sample_size=2**12):
         self.data_path = data_path
         self.vessel_files = get_vessel_files(data_path)
@@ -88,26 +142,22 @@ class VesselGridData(Dataset):
             point_vel = point_vel[mask_indices]
         
         return grid, point_vel
-    
-class VesselGridData2(Dataset):
-    def __init__(self, data_path):
-        self.data_path = data_path
-        self.vessel_files = get_vessel_files(data_path)
-        self.num_vessels = len(self.vessel_files)
-    
-    def __len__(self): 
-        return self.num_vessels
-    
-    def __getitem__(self, index):
-        vessel_file = self.vessel_files[index]
-        fluid_data = np.load(vessel_file)
-       
-        grid_xyz = fluid_data['vessel_mask']
-        grid_vel = fluid_data['interp_vel']
-        
-        return grid_xyz, grid_vel
 
-class VesselGridCondData(Dataset):
+class VesselGridCondData(Dataset): # Dataset for Grid Inputs with Condition Array
+    """
+    Dataset for Grid Inputs with Condition Array.
+    This dataset class loads vessel grid data and corresponding condition arrays from specified file paths.
+    Attributes:
+        data_path (str): Path to the directory containing vessel data files.
+        vessel_files (list): List of file paths for vessel data.
+        condition_files (list): List of file paths for condition data.
+        num_vessels (int): Number of vessel data files.
+    Methods:
+        __len__(): Returns the number of vessel data files.
+        __getitem__(index): Returns the grid data and condition array for the specified index.
+    Args:
+        data_path (str): Path to the directory containing vessel data files.
+    """
     def __init__(self, data_path):
         self.data_path = data_path
         self.vessel_files = get_vessel_files(data_path)
@@ -129,11 +179,35 @@ class VesselGridCondData(Dataset):
         
         return grid_xyz, grid_vel, cond_array
 
-    
-# Single Point Classes
 
+########################
+# Single Point Classes #
+########################
 
 class VesselDatasetSinglePoint(Dataset):
+    """
+    A PyTorch Dataset class for loading and processing vessel data from numpy files.
+    Args:
+        data_path (str): Path to the directory containing the numpy files.
+        sample_size (int, optional): Number of samples to draw from each file. Default is 256.
+        transform_function (callable, optional): Function to transform the input and target arrays. Default is transform_linear.
+        sample_cap (int, optional): Maximum number of samples to retain after loading data. If None, no cap is applied. Default is None.
+    Attributes:
+        data_path (str): Path to the directory containing the numpy files.
+        sample_size (int): Number of samples to draw from each file.
+        transform_function (callable): Function to transform the input and target arrays.
+        sample_cap (int or None): Maximum number of samples to retain after loading data.
+        input_data (list): List of input data arrays.
+        target_data (list): List of target data arrays.
+        ref_idx (list): List of reference indices for each sample.
+        ref_data (list): List of reference data arrays.
+    Methods:
+        load_data(): Loads and processes the data from the numpy files.
+        apply_cap(): Applies the sample cap to the loaded data.
+        __len__(): Returns the number of samples in the dataset.
+        __getitem__(idx): Returns the input, target, and reference data for the given index.
+    """
+    
     def __init__(self, data_path, sample_size=256, transform_function=transform_linear, sample_cap=None):
         self.data_path = data_path
         self.sample_size = sample_size
@@ -186,7 +260,29 @@ class VesselDatasetSinglePoint(Dataset):
     def __getitem__(self, idx):
         return torch.Tensor(self.input_data[idx]), torch.Tensor(self.target_data[idx]), torch.Tensor(self.ref_data[self.ref_idx[idx]])
 
-class VesselDatasetRelativeSinglePoint(Dataset):
+class VesselDatasetRelativeSinglePoint(Dataset): # Dataset for Relative Inputs
+    """
+    A PyTorch Dataset class for loading vessel data with relative inputs.
+    Args:
+        data_path (str): Path to the directory containing the dataset files.
+        sample_size (int, optional): Number of sample points to select from each file. Default is 256.
+        transform_function (callable, optional): A function to transform the data. Default is transform_linear.
+    Attributes:
+        data_path (str): Path to the directory containing the dataset files.
+        sample_size (int): Number of sample points to select from each file.
+        transform_function (callable): A function to transform the data.
+        input_data (list): List to store input data from all files.
+        target_data (list): List to store target data from all files.
+        ref_idx (list): List to store reference indices for each input data point.
+        ref_data (list): List to store reference data points.
+    Methods:
+        load_data():
+            Loads and processes data from the specified directory.
+        __len__():
+            Returns the total number of samples in the dataset.
+        __getitem__(idx):
+            Returns the input, target, and reference data for the given index.
+    """
     def __init__(self, data_path, sample_size=256, transform_function=transform_linear):
         self.data_path = data_path
         self.sample_size = sample_size
@@ -222,7 +318,31 @@ class VesselDatasetRelativeSinglePoint(Dataset):
         return torch.Tensor(self.input_data[idx]), torch.Tensor(self.target_data[idx]), torch.Tensor(self.ref_data[self.ref_idx[idx]])
     
     
-class VesselGridSinglePointData(Dataset):
+class VesselGridSinglePointData(Dataset): # Dataset for Grid Inputs
+    """
+    Dataset class for loading and processing vessel grid data for single point inputs.
+    Args:
+        data_path (str): Path to the directory containing the vessel data files.
+        sample_size (int, optional): Number of samples to draw from each file for reference data. Default is 256.
+        transform_function (callable, optional): Function to transform the input, target, and geometry arrays. Default is transform_linear.
+        sample_cap (int, optional): Maximum number of samples to draw from each file. If None, all samples are used. Default is None.
+    Attributes:
+        data_path (str): Path to the directory containing the vessel data files.
+        transform_function (callable): Function to transform the input, target, and geometry arrays.
+        sample_size (int): Number of samples to draw from each file for reference data.
+        sample_cap (int or None): Maximum number of samples to draw from each file.
+        vessel_files (list): List of vessel data files in the data_path directory.
+        num_vessels (int): Number of vessel data files.
+        input_data (list): List of input data arrays.
+        target_data (list): List of target data arrays.
+        ref_idx (list): List of reference indices.
+        ref_data (list): List of reference data arrays.
+    Methods:
+        __len__(): Returns the total number of samples in the dataset.
+        load_data(): Loads and processes the vessel data files.
+        __getitem__(idx): Returns the input, target, and reference data for the given index.
+    """
+
     def __init__(self, data_path, sample_size=256, transform_function=transform_linear, sample_cap=None):
         self.data_path = data_path
         self.transform_function = transform_function
@@ -277,51 +397,3 @@ class VesselGridSinglePointData(Dataset):
     
     def __getitem__(self, idx):
         return torch.Tensor(self.input_data[idx]), torch.Tensor(self.target_data[idx]), torch.Tensor(self.ref_data[self.ref_idx[idx]])
-
-
-# Specialized Datasets
-
-class PointnetVesselData(Dataset):
-    def __init__(self, data_path, num_samples=None, enable_transform=True):
-        self.data_path = data_path
-        self.num_samples = num_samples
-        self.vessel_files = self._get_vessel_files()
-        self.num_vessels = len(self.vessel_files)
-        self.enable_transform = enable_transform
-        
-    def _get_vessel_files(self):
-        vessel_files = []
-        for fluid_filename in os.listdir(self.data_path):
-            if fluid_filename in TEST_VESSELS:
-                continue
-            if fluid_filename.endswith('.npz'):
-                fluid_file_path = os.path.join(self.data_path, fluid_filename)
-                vessel_files.append(fluid_file_path)
-        return vessel_files
-    
-    def transform(self, input_tensor, target_tensor):
-        if self.enable_transform:
-            centroid = input_tensor.mean(dim=0)
-            translated_points = input_tensor - centroid
-            
-            max_abs_val = torch.max(torch.abs(translated_points))
-            
-            scaled_points = translated_points / (2 * max_abs_val)
-            
-            input_tensor = scaled_points + 0.5
-        return input_tensor, target_tensor
-    
-    def __len__(self): 
-        return self.num_vessels
-    
-    def __getitem__(self, index):
-        vessel_file = self.vessel_files[index]
-        fluid_data = np.load(vessel_file)
-        if self.num_samples is not None:
-            sample_indices = np.random.choice(len(fluid_data['fluid_points']), self.num_samples, replace=False)
-            input_tensor = torch.Tensor(fluid_data['fluid_points'][sample_indices])
-            target_tensor = torch.Tensor(fluid_data['sys_vel'][sample_indices])
-        else:
-            input_tensor = torch.Tensor(fluid_data['fluid_points'])
-            target_tensor = torch.Tensor(fluid_data['sys_vel'])
-        return self.transform(input_tensor, target_tensor)

@@ -15,7 +15,7 @@ DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 failed_model_list = []
 
 def decode_model_name(model_name):
-    model_split = model_name.split('.')[0].split('_')# model_name.split('_')
+    model_split = model_name.split('.')[0].split('_')
     # Remove the model name (wait for double underscore)
     model_split = model_split[model_split.index('')+1:]
     if len(model_split) <= 12:
@@ -74,7 +74,6 @@ def evaluate_model(model_path, param_dict):
             cond_object = np.load(cond_filepath+".npz")
             cond_array = torch.Tensor(cond_object['condition_array']).to(DEVICE, dtype=torch.float32)
         
-        # Todo - Do batching
         batched_input_tensor = xyz.unsqueeze(0)
         batched_target_tensor = vel.permute(3, 0, 1, 2)
             
@@ -85,13 +84,7 @@ def evaluate_model(model_path, param_dict):
         if model_dict['cond']:
             batched_pred_tensor, mu, log_var = model(batched_input_tensor, cond_array.unsqueeze(0))
         else:
-            batched_pred_tensor, mu, log_var = model(batched_input_tensor)
-        
-        # batched_pred_tensor to points
-        # batched_target_tensor to points
-        # batched_input_tensor to points
-        
-        
+            batched_pred_tensor, mu, log_var = model(batched_input_tensor)     
         
         _, batched_target_tensor = grid_to_point_cloud(
             batched_input_tensor.permute(1,2,3,0), 

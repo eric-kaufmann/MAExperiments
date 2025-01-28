@@ -18,6 +18,8 @@ if __name__ == "__main__":
     
     result = pd.DataFrame()
     for i, model_file in enumerate(model_list):
+        if "ep_100" in model_file:
+            continue
         print(f"{i}: {model_file}")
         model_results = evaluate_model(
             os.path.join(MODEL_PATH, model_file), 
