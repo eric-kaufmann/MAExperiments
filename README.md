@@ -10,7 +10,7 @@ This thesis investigates the applicability of various neural network architectur
 
 ### Data Preprocessing Methods
 
-In ```data/```, you can find all source data from Eulzer et al., partially generated using Python scripts in ```preprocessing_scripts```.
+In ```data/```, you can find all source data from Eulzer et al., partially generated using Python scripts in ```preprocessing_scripts```. (The ```data/``` dir is not pushed bu can be reqested)
 
 - ```vessel_point_data```
   - Point data for all vessels
