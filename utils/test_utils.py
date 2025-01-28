@@ -5,20 +5,39 @@ import pandas as pd
 from utils.metrics import *
 from utils.helper_functions import *
 from utils.models import *
-from utils.pointnet2_utils import PointNet2_2, PointNet2
+from utils.pointnet2_utils import PointNet2
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 SAVE_POINT_RESULTS = False
 
 def load_model_weights(model, model_path):
+    """
+    Loads the weights of the specified model and moves it to the correct device.
+
+    Parameters:
+        model (torch.nn.Module): The PyTorch model instance.
+        model_path (str): Path to the model weights file.
+
+    Returns:
+        torch.nn.Module: The model with loaded weights on the configured device.
+    """
     state_dict = torch.load(model_path, map_location=torch.device(DEVICE))
     model.load_state_dict(state_dict)
     model = model.to(DEVICE)
     return model
 
 def decode_model_name(model_name):
-    model_split = model_name.split('.')[0].split('_')# model_name.split('_')
+    """
+    Splits the model name to extract relevant parts, removing extra markers.
+
+    Parameters:
+        model_name (str): The raw model name string, including its file extension.
+
+    Returns:
+        list: A list of strings representing the processed parts of the model name.
+    """
+    model_split = model_name.split('.')[0].split('_')
     # Remove the model name (wait for double underscore)
     model_split = model_split[model_split.index('')+1:]
     model_dict = {
@@ -31,6 +50,16 @@ def decode_model_name(model_name):
     return model_dict
 
 def save_results(results, name, result_path=None):
+    """
+    Save the results to a CSV file.
+    Parameters:
+    results (DataFrame): The results to be saved.
+    name (str): The name of the file (without extension).
+    result_path (str, optional): The directory path where the file will be saved. 
+                                 Defaults to "/home/ne34gux/workspace/experiments/results".
+    Returns:
+    None
+    """
     if result_path is None:
         result_path = "/home/ne34gux/workspace/experiments/results"
     results.to_csv(
@@ -40,6 +69,15 @@ def save_results(results, name, result_path=None):
     print(f"Results saved to {os.path.join(result_path, name.replace('.pth', '.csv'))}")
         
 def get_test_files(transform_function_str):
+    """
+    Get the test file paths based on the transformation function string.
+    Parameters:
+    transform_function_str (str): The transformation function identifier. 
+                                  It can be 'grid64', 'grid128', 'rel', or any other string for default paths.
+    Returns:
+    zip: A zip object containing tuples of test file names and their corresponding paths.
+    """
+    
     if transform_function_str == 'grid64':
         vessel_data_path = "/home/ne34gux/workspace/experiments/data/vessel_grid64_data"
         geometry_data_path = "/home/ne34gux/workspace/experiments/data/geom_grid64_data"
@@ -64,6 +102,26 @@ def get_test_files(transform_function_str):
     return file_information
 
 def get_model(param_dict, model_dict):
+    """
+    Constructs and returns a model based on the provided parameters.
+    Args:
+        param_dict (dict): Dictionary containing parameters for model construction.
+            Expected keys:
+                - 'sample_size': Size of the sample (int).
+                - 'model_name': Name of the model to construct (str).
+                - 'input_size': Size of the input (int).
+                - 'hidden_size': List of hidden layer sizes (list of int).
+                - 'output_size': Size of the output (int).
+                - 'encoder_input_size': Size of the encoder input (int).
+                - 'encoder_hidden_size': List of encoder hidden layer sizes (list of int).
+                - 'encoder_output_size': Size of the encoder output (int).
+        model_dict (dict): Dictionary containing model-specific parameters.
+            Expected keys:
+                - 'transf': Transformation type (str).
+    Returns:
+        model: An instance of the constructed model.
+    """
+    
     if model_dict['transf'] == 'rel':
         input_size = 8 * param_dict['sample_size']
     elif (param_dict['model_name'] != 'pointnet') and (param_dict['model_name'] != 'pointnetpp'):
@@ -87,6 +145,31 @@ def get_model(param_dict, model_dict):
     return model
         
 def evaluate_model(model_path, param_dict):
+    """
+    Evaluates a machine learning model on a set of test files and returns the results as a DataFrame.
+    Parameters:
+    -----------
+    model_path : str
+        Path to the model file.
+    param_dict : dict
+        Dictionary containing model parameters and configurations.
+    Returns:
+    --------
+    results_df : pandas.DataFrame
+        DataFrame containing evaluation results with the following columns:
+        - "Model_Name": Name of the model.
+        - "Case": Test case filename.
+        - "Learning_Rate": Learning rate used for training the model.
+        - "Epochs": Number of epochs the model was trained for.
+        - "Transformation": Type of transformation applied to the data.
+        - "Rotation": Rotation applied to the data.
+        - "Loss_Function": Loss function used for training the model.
+        - "MSE": Mean Squared Error of the model predictions.
+        - "MAE": Mean Absolute Error of the model predictions.
+        - "Cosine_Similarity": Cosine similarity between the model predictions and the target values.
+        - "Angle_Difference": Angle difference between the model predictions and the target values.
+    """
+    
     model_dict = decode_model_name(model_path)
     
     transform_function = transform_function_mapping[model_dict['transf']]
@@ -97,12 +180,7 @@ def evaluate_model(model_path, param_dict):
     model = load_model_weights(model, model_path)
     
     print("   model_size:", get_model_size(model))
-    
-    # print("#### 1 ####")
-    # print("torch.cuda.memory_allocated: %fGB"%(torch.cuda.memory_allocated(0)/1024/1024/1024))
-    # print("torch.cuda.memory_reserved: %fGB"%(torch.cuda.memory_reserved(0)/1024/1024/1024))
-    # print("torch.cuda.max_memory_reserved: %fGB"%(torch.cuda.max_memory_reserved(0)/1024/1024/1024))
-    
+
     results = []
     
     for i, (filename, file_path) in enumerate(test_files):
@@ -127,13 +205,6 @@ def evaluate_model(model_path, param_dict):
                 'mesh_points': 'mesh_points'
             }
             
-        # print("#### 2 ####")
-        # print("torch.cuda.memory_allocated: %fGB"%(torch.cuda.memory_allocated(0)/1024/1024/1024))
-        # print("torch.cuda.memory_reserved: %fGB"%(torch.cuda.memory_reserved(0)/1024/1024/1024))
-        # print("torch.cuda.max_memory_reserved: %fGB"%(torch.cuda.max_memory_reserved(0)/1024/1024/1024))
-        
-        # if ("single_coord_linear_encoder__lr_1_ep_30_transf_unitcube_rot_False_loss_mse" in model_path) and ("cylinder" in filename):
-        #     print("STOP")
         
         # Load the data
         if 'linear_encoder' in param_dict['model_name']:
@@ -142,11 +213,8 @@ def evaluate_model(model_path, param_dict):
             if model_dict['transf'] == 'rel':
                 geom = xyz[:,:3]
             elif model_dict['transf'] == 'grid64' or model_dict['transf'] == 'grid128':
-                xyz, vel = grid_to_point_cloud(xyz, vel)
-                
+                xyz, vel = grid_to_point_cloud(xyz, vel)              
                 # get only the points with non-zero velocity
-                # xyz = xyz[zero_vel_idx]
-                # vel = vel[zero_vel_idx]
                 geom = xyz[torch.all(vel != 0, dim=1)]
             else:
                 geom = torch.Tensor(test_object[vessel_dict['mesh_points']])
@@ -168,11 +236,6 @@ def evaluate_model(model_path, param_dict):
             xyz, vel, geom = transform_function(xyz, vel, mesh_points=geom)
         else:
             xyz, vel = transform_function(xyz, vel)
-            
-        # print("#### 3 ####")
-        # print("torch.cuda.memory_allocated: %fGB"%(torch.cuda.memory_allocated(0)/1024/1024/1024))
-        # print("torch.cuda.memory_reserved: %fGB"%(torch.cuda.memory_reserved(0)/1024/1024/1024))
-        # print("torch.cuda.max_memory_reserved: %fGB"%(torch.cuda.max_memory_reserved(0)/1024/1024/1024))
         
         # Batch the data
         in_channels = 3 if model_dict['transf'] != 'rel' else 8
@@ -189,12 +252,6 @@ def evaluate_model(model_path, param_dict):
             
         batched_input_tensor = batched_input_tensor.to(DEVICE)
         batched_target_tensor = batched_target_tensor.to(DEVICE)
-        
-        
-        # print("#### 4 ####")
-        # print("torch.cuda.memory_allocated: %fGB"%(torch.cuda.memory_allocated(0)/1024/1024/1024))
-        # print("torch.cuda.memory_reserved: %fGB"%(torch.cuda.memory_reserved(0)/1024/1024/1024))
-        # print("torch.cuda.max_memory_reserved: %fGB"%(torch.cuda.max_memory_reserved(0)/1024/1024/1024))
             
         # Run through the model
         if 'linear_encoder' in param_dict['model_name']:
@@ -209,10 +266,6 @@ def evaluate_model(model_path, param_dict):
             batched_pred_tensor = torch.zeros_like(batched_target_tensor, dtype=torch.float32).to(DEVICE)
             for s_idx, sub_batch in enumerate(sub_batches):
                 sub_batch = sub_batch.to(DEVICE)
-                # print()
-                # print("torch.cuda.memory_allocated: %fGB"%(torch.cuda.memory_allocated(0)/1024/1024/1024))
-                # print("torch.cuda.memory_reserved: %fGB"%(torch.cuda.memory_reserved(0)/1024/1024/1024))
-                # print("torch.cuda.max_memory_reserved: %fGB"%(torch.cuda.max_memory_reserved(0)/1024/1024/1024))
                 batched_pred_tensor[s_idx*sub_batch_size:(s_idx+1)*sub_batch_size] = model(sub_batch).reshape(sub_batch.shape[0], param_dict['sample_size'], out_channels).detach()
         elif 'linear_mlp' in param_dict['model_name']:
             batched_pred_tensor = model(batched_input_tensor).reshape(B, out_channels)
@@ -235,11 +288,6 @@ def evaluate_model(model_path, param_dict):
         mae = mae_error(batched_pred_tensor, batched_target_tensor)
         cs = cosine_similarity(batched_pred_tensor, batched_target_tensor)
         angle_diff = calculate_angle_difference(batched_pred_tensor, batched_target_tensor)
-        
-        # print("#### 5 ####")
-        # print("torch.cuda.memory_allocated: %fGB"%(torch.cuda.memory_allocated(0)/1024/1024/1024))
-        # print("torch.cuda.memory_reserved: %fGB"%(torch.cuda.memory_reserved(0)/1024/1024/1024))
-        # print("torch.cuda.max_memory_reserved: %fGB"%(torch.cuda.max_memory_reserved(0)/1024/1024/1024))
         
         
         if SAVE_POINT_RESULTS:
