@@ -32,4 +32,4 @@ if __name__ == "__main__":
         )
         result = pd.concat([result, model_results]).reset_index(drop=True)
         
-    save_results(result, "results_"+MODEL_NAME)
+    save_results(result, "results2_"+MODEL_NAME)

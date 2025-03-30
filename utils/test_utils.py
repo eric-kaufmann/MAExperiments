@@ -295,7 +295,7 @@ def evaluate_model(model_path, param_dict):
             save_path = os.path.join(save_path, param_dict['model_name'])
             save_path = os.path.join(save_path, model_dict['transf'])
             
-            save_filename = str(filename.replace(".npz", "")) + "__" + model_path.split("/")[-1].replace(".pth", "") + ".npz"
+            save_filename = str(filename.replace(".npz", "")) + "__" + model_path.split("/")[-1].replace(".pth", "") + "_2.npz"
             
             if not os.path.exists(save_path):
                 os.makedirs(save_path)

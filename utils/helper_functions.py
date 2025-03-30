@@ -349,8 +349,8 @@ transform_function_mapping = {
     'linear': transform_linear,
     'unitcube': transform_unit_cube,
     'zerocenter': transform_zero_center,
-    'grid64': transform_linear,
-    'grid128': transform_linear,
+    'grid64': transform_unit_cube,
+    'grid128': transform_unit_cube,
     'rel': transform_linear
 }
 
